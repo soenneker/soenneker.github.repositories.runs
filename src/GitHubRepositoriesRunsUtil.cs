@@ -1,22 +1,27 @@
-using System.Linq;
-using Soenneker.GitHub.Repositories.Runs.Abstract;
-using System.Threading.Tasks;
-using System.Threading;
-using Octokit;
+using Microsoft.Extensions.Logging;
 using Soenneker.Extensions.Task;
 using Soenneker.Extensions.ValueTask;
-using Soenneker.GitHub.Client.Abstract;
+using Soenneker.GitHub.OpenApiClient.Models;
+using Soenneker.GitHub.Repositories.Runs.Abstract;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Soenneker.GitHub.ClientUtil.Abstract;
+using Soenneker.GitHub.OpenApiClient;
+using Soenneker.GitHub.OpenApiClient.Repos.Item.Item.Commits.Item.CheckRuns;
 
 namespace Soenneker.GitHub.Repositories.Runs;
 
-/// <inheritdoc cref="IGitHubRepositoriesRunsUtil"/>
-public class GitHubRepositoriesRunsUtil: IGitHubRepositoriesRunsUtil
+///<inheritdoc cref="IGitHubRepositoriesRunsUtil"/>
+public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
 {
-    private readonly IGitHubClientUtil _gitHubClientUtil;
+    private readonly ILogger<GitHubRepositoriesRunsUtil> _logger;
+    private readonly IGitHubOpenApiClientUtil _gitHubOpenApiClientUtil;
 
-    public GitHubRepositoriesRunsUtil(IGitHubClientUtil gitHubClientUtil)
+    public GitHubRepositoriesRunsUtil(ILogger<GitHubRepositoriesRunsUtil> logger, IGitHubOpenApiClientUtil gitHubOpenApiClientUtil)
     {
-        _gitHubClientUtil = gitHubClientUtil;
+        _logger = logger;
+        _gitHubOpenApiClientUtil = gitHubOpenApiClientUtil;
     }
 
     public ValueTask<bool> HasFailedRun(Repository repository, PullRequest pullRequest, CancellationToken cancellationToken = default)
@@ -26,9 +31,13 @@ public class GitHubRepositoriesRunsUtil: IGitHubRepositoriesRunsUtil
 
     public async ValueTask<bool> HasFailedRun(string owner, string name, PullRequest pullRequest, CancellationToken cancellationToken = default)
     {
-        GitHubClient client = await _gitHubClientUtil.Get(cancellationToken).NoSync();
+        GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken).NoSync();
 
-        CheckRunsResponse? checkRuns = await client.Check.Run.GetAllForReference(owner, name, pullRequest.Head.Sha).NoSync();
-        return checkRuns.CheckRuns.Any(cr => cr.Conclusion == CheckConclusion.Failure);
+        CheckRunsGetResponse? response = await client.Repos[owner][name]
+                                                     .Commits[pullRequest.Head.Sha]
+                                                     .CheckRuns.GetAsCheckRunsGetResponseAsync(cancellationToken: cancellationToken)
+                                                     .NoSync();
+
+        return response?.CheckRuns?.Any(cr => cr.Conclusion == CheckRun_conclusion.Failure) == true;
     }
 }
