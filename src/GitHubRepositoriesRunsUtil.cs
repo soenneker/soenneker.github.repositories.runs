@@ -31,6 +31,9 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
 
     public async ValueTask<bool> HasFailedRun(string owner, string name, PullRequest pullRequest, CancellationToken cancellationToken = default)
     {
+        if (pullRequest?.Head?.Sha == null)
+            return false;
+
         GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken).NoSync();
 
         CheckRunsGetResponse? response = await client.Repos[owner][name]
