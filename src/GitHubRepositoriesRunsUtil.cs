@@ -31,16 +31,21 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
 
     public async ValueTask<bool> HasFailedRun(string owner, string name, PullRequest pullRequest, CancellationToken cancellationToken = default)
     {
-        if (pullRequest?.Head?.Sha == null)
+        // 1) If there’s no head SHA, bail immediately.
+        if (pullRequest.Head?.Sha == null)
             return false;
 
-        GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken).NoSync();
+        // 2) If GitHub has already created a merge commit for this PR, use that SHA.
+        //    Otherwise, fall back to the branch head.
+        string? shaToCheck = pullRequest.MergeCommitSha ?? pullRequest.Head.Sha;
 
+        GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken).NoSync();
         CheckRunsGetResponse? response = await client.Repos[owner][name]
-                                                     .Commits[pullRequest.Head.Sha]
+                                                     .Commits[shaToCheck]
                                                      .CheckRuns.GetAsCheckRunsGetResponseAsync(cancellationToken: cancellationToken)
                                                      .NoSync();
 
+        // 3) Look for any check run whose conclusion is “failure”
         return response?.CheckRuns?.Any(cr => cr.Conclusion == CheckRun_conclusion.Failure) == true;
     }
 }
