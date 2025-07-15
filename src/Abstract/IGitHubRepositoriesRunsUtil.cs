@@ -1,4 +1,5 @@
-﻿using Soenneker.GitHub.OpenApiClient.Models;
+﻿using Soenneker.GitHub.OpenApiClient;
+using Soenneker.GitHub.OpenApiClient.Models;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Threading;
@@ -72,4 +73,7 @@ public interface IGitHubRepositoriesRunsUtil
     /// </returns>
     [Pure]
     ValueTask<List<CheckRun>> GetAllRuns(string owner, string repo, string sha, CancellationToken cancellationToken = default);
+
+    [Pure]
+    ValueTask<bool> HasAnyStatuses(string owner, string repo, string sha, GitHubOpenApiClient client, CancellationToken cancellationToken = default);
 }
