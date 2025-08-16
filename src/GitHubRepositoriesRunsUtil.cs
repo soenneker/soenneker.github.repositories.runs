@@ -114,12 +114,12 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         {
             CheckRunsGetResponse? resp = await client.Repos[owner][repo]
                                                      .Commits[sha]
-                                                     .CheckRuns.GetAsCheckRunsGetResponseAsync(cfg =>
+                                                     .CheckRuns.GetAsync(cfg =>
                                                      {
                                                          cfg.QueryParameters.PerPage = PageSize;
                                                          cfg.QueryParameters.Page = page;
-                                                         cfg.QueryParameters.FilterAsGetFilterQueryParameterType = GetFilterQueryParameterType.Latest;
-                                                         cfg.QueryParameters.StatusAsGetStatusQueryParameterType = GetStatusQueryParameterType.Completed;
+                                                         cfg.QueryParameters.Filter = GetFilterQueryParameterType.Latest;
+                                                         cfg.QueryParameters.Status = GetStatusQueryParameterType.Completed;
                                                      }, cancellationToken)
                                                      .NoSync();
 
@@ -171,11 +171,11 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         // 2) check‑runs → request just one
         CheckRunsGetResponse? resp = await client.Repos[owner][repo]
                                                  .Commits[sha]
-                                                 .CheckRuns.GetAsCheckRunsGetResponseAsync(cfg =>
+                                                 .CheckRuns.GetAsync(cfg =>
                                                  {
                                                      cfg.QueryParameters.PerPage = 1; // ask for ONE
-                                                     cfg.QueryParameters.FilterAsGetFilterQueryParameterType = GetFilterQueryParameterType.Latest;
-                                                     cfg.QueryParameters.StatusAsGetStatusQueryParameterType = GetStatusQueryParameterType.Completed;
+                                                     cfg.QueryParameters.Filter = GetFilterQueryParameterType.Latest;
+                                                     cfg.QueryParameters.Status = GetStatusQueryParameterType.Completed;
                                                  }, cancellationToken)
                                                  .NoSync();
 
