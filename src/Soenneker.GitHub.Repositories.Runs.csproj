@@ -43,6 +43,6 @@
 
     <ItemGroup>
         <PackageReference Include="Soenneker.Extensions.Task" Version="4.0.106" />
-        <PackageReference Include="Soenneker.GitHub.ClientUtil" Version="4.0.160" />
+        <PackageReference Include="Soenneker.GitHub.ClientUtil" Version="4.0.161" />
     </ItemGroup>
 </Project>
