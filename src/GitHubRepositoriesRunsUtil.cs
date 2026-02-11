@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -82,7 +82,7 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
     private async ValueTask<bool> HasCommitFailure(string owner, string repo, string sha, GitHubOpenApiClient client, CancellationToken cancellationToken)
     {
         // a) legacy combined status roll‑up
-        bool combinedFailed = await GetCombinedStatusFailed(owner, repo, sha, client, cancellationToken).NoSync();
+        (bool combinedFailed, _) = await GetCommitStatus(owner, repo, sha, client, cancellationToken).NoSync();
 
         if (combinedFailed)
             return true; // hard failure – we’re done
@@ -92,11 +92,18 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         return runs.Any(r => r.Conclusion.HasValue && _badConclusions.Contains(r.Conclusion.Value));
     }
 
-    private static async ValueTask<bool> GetCombinedStatusFailed(string owner, string repo, string sha, GitHubOpenApiClient client, CancellationToken ct)
+    /// <summary>
+    /// Fetches commit status once and returns both combined-failed and had-statuses to avoid duplicate API calls.
+    /// </summary>
+    private static async ValueTask<(bool combinedFailed, bool hadStatuses)> GetCommitStatus(string owner, string repo, string sha, GitHubOpenApiClient client,
+        CancellationToken ct)
     {
         CombinedCommitStatus? status = await client.Repos[owner][repo].Commits[sha].Status.GetAsync(cancellationToken: ct).NoSync();
 
-        return status is {State: "failure" or "error"};
+        bool combinedFailed = status is {State: "failure" or "error"};
+        bool hadStatuses = status?.Statuses?.Count > 0;
+
+        return (combinedFailed, hadStatuses);
     }
 
     /// <summary>
@@ -106,7 +113,7 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
     private static async ValueTask<List<CheckRun>> GetLatestRuns(string owner, string repo, string sha, GitHubOpenApiClient client,
         CancellationToken cancellationToken = default)
     {
-        const int PageSize = 100;
+        const int pageSize = 100;
         var allRuns = new List<CheckRun>();
         var page = 1;
 
@@ -116,7 +123,7 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
                                                      .Commits[sha]
                                                      .CheckRuns.GetAsync(cfg =>
                                                      {
-                                                         cfg.QueryParameters.PerPage = PageSize;
+                                                         cfg.QueryParameters.PerPage = pageSize;
                                                          cfg.QueryParameters.Page = page;
                                                          cfg.QueryParameters.Filter = GetFilterQueryParameterType.Latest;
                                                          cfg.QueryParameters.Status = GetStatusQueryParameterType.Completed;
@@ -127,7 +134,7 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
                 allRuns.AddRange(resp.CheckRuns);
 
             // Early‑out when the page has less than the page size (no more data)
-            if (resp?.CheckRuns is null || resp.CheckRuns.Count < PageSize)
+            if (resp?.CheckRuns is null || resp.CheckRuns.Count < pageSize)
                 break;
 
             // Also early‑out when we already found a failing run to save API calls
@@ -143,9 +150,8 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
     private async ValueTask<(bool failed, bool hadAnyRuns)> HasCommitFailureWithAny(string owner, string repo, string sha, GitHubOpenApiClient client,
         CancellationToken cancellationToken)
     {
-        // --- legacy statuses ---------------------------------------------------
-        bool combinedFailed = await GetCombinedStatusFailed(owner, repo, sha, client, cancellationToken).NoSync();
-        bool hadStatuses = await HasAnyStatuses(owner, repo, sha, client, cancellationToken).NoSync();
+        // --- legacy statuses (single API call for both combined state and had-statuses) ---
+        (bool combinedFailed, bool hadStatuses) = await GetCommitStatus(owner, repo, sha, client, cancellationToken).NoSync();
 
         if (combinedFailed)
             return (true, true); // we already know it failed and had CI
