@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Threading;
 using System.Threading.Tasks;
+using Repository = Soenneker.GitHub.OpenApiClient.Models.Repository_1;
 
 namespace Soenneker.GitHub.Repositories.Runs.Abstract;
 
@@ -23,7 +24,7 @@ public interface IGitHubRepositoriesRunsUtil
     /// </summary>
     /// <param name="repo">
     ///     The repository that owns the pull-request. The
-    ///     <see cref="Repository.Owner.Login" /> and <see cref="Repository.Name" />
+    ///     <see cref="Repository.Owner" /> and <see cref="Repository.Name" />
     ///     properties are used to build the REST path.
     /// </param>
     /// <param name="pr">The pull-request to inspect.</param>

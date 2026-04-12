@@ -10,6 +10,7 @@ using Soenneker.GitHub.OpenApiClient;
 using Soenneker.GitHub.OpenApiClient.Models;
 using Soenneker.GitHub.OpenApiClient.Repos.Item.Item.Commits.Item.CheckRuns;
 using Soenneker.GitHub.Repositories.Runs.Abstract;
+using Repository = Soenneker.GitHub.OpenApiClient.Models.Repository_1;
 
 namespace Soenneker.GitHub.Repositories.Runs;
 
@@ -119,16 +120,16 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
 
         while (true)
         {
-            CheckRunsGetResponse? resp = await client.Repos[owner][repo]
-                                                     .Commits[sha]
-                                                     .CheckRuns.GetAsync(cfg =>
-                                                     {
-                                                         cfg.QueryParameters.PerPage = pageSize;
-                                                         cfg.QueryParameters.Page = page;
-                                                         cfg.QueryParameters.Filter = GetFilterQueryParameterType.Latest;
-                                                         cfg.QueryParameters.Status = GetStatusQueryParameterType.Completed;
-                                                     }, cancellationToken)
-                                                     .NoSync();
+            ChecksListForRef200? resp = await client.Repos[owner][repo]
+                                                    .Commits[sha]
+                                                    .CheckRuns.GetAsync(cfg =>
+                                                    {
+                                                        cfg.QueryParameters.PerPage = pageSize;
+                                                        cfg.QueryParameters.Page = page;
+                                                        cfg.QueryParameters.Filter = GetFilterQueryParameterType.Latest;
+                                                        cfg.QueryParameters.Status = GetStatusQueryParameterType.Completed;
+                                                    }, cancellationToken)
+                                                    .NoSync();
 
             if (resp?.CheckRuns is {Count: > 0})
                 allRuns.AddRange(resp.CheckRuns);
@@ -175,7 +176,7 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
             return true;
 
         // 2) check‑runs → request just one
-        CheckRunsGetResponse? resp = await client.Repos[owner][repo]
+        ChecksListForRef200? resp = await client.Repos[owner][repo]
                                                  .Commits[sha]
                                                  .CheckRuns.GetAsync(cfg =>
                                                  {
