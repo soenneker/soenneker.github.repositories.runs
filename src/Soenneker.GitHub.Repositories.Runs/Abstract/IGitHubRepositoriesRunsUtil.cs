@@ -1,10 +1,10 @@
-﻿using Soenneker.GitHub.OpenApiClient;
+using Soenneker.GitHub.OpenApiClient;
 using Soenneker.GitHub.OpenApiClient.Models;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Threading;
 using System.Threading.Tasks;
-using Repository = Soenneker.GitHub.OpenApiClient.Models.Repository_1;
+using Repository = Soenneker.GitHub.OpenApiClient.Models.Repository;
 
 namespace Soenneker.GitHub.Repositories.Runs.Abstract;
 

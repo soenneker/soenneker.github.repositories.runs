@@ -10,7 +10,7 @@ using Soenneker.GitHub.OpenApiClient;
 using Soenneker.GitHub.OpenApiClient.Models;
 using Soenneker.GitHub.OpenApiClient.Repos.Item.Item.Commits.Item.CheckRuns;
 using Soenneker.GitHub.Repositories.Runs.Abstract;
-using Repository = Soenneker.GitHub.OpenApiClient.Models.Repository_1;
+using Repository = Soenneker.GitHub.OpenApiClient.Models.Repository;
 
 namespace Soenneker.GitHub.Repositories.Runs;
 
@@ -120,7 +120,7 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
 
         while (true)
         {
-            ChecksListForRef200? resp = await client.Repos[owner][repo]
+            CheckRunsGetResponse? resp = await client.Repos[owner][repo]
                                                     .Commits[sha]
                                                     .CheckRuns.GetAsync(cfg =>
                                                     {
@@ -176,7 +176,7 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
             return true;
 
         // 2) check‑runs → request just one
-        ChecksListForRef200? resp = await client.Repos[owner][repo]
+        CheckRunsGetResponse? resp = await client.Repos[owner][repo]
                                                  .Commits[sha]
                                                  .CheckRuns.GetAsync(cfg =>
                                                  {
