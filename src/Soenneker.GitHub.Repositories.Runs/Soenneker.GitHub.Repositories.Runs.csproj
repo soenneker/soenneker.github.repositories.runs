@@ -45,7 +45,6 @@
 
     <ItemGroup>
         <PackageReference Include="Soenneker.Extensions.Task" Version="4.0.120" />
-        <PackageReference Include="Soenneker.GitHub.ClientUtil" Version="4.0.439" />
-        <PackageReference Include="Soenneker.GitHub.OpenApiClient" Version="4.0.177" />
+        <PackageReference Include="Soenneker.GitHub.ClientUtil" Version="4.0.440" />
     </ItemGroup>
 </Project>
