@@ -1,7 +1,3 @@
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Soenneker.Extensions.Task;
 using Soenneker.Extensions.ValueTask;
@@ -10,6 +6,13 @@ using Soenneker.GitHub.OpenApiClient;
 using Soenneker.GitHub.OpenApiClient.Models;
 using Soenneker.GitHub.OpenApiClient.Repos.Item.Item.Commits.Item.CheckRuns;
 using Soenneker.GitHub.Repositories.Runs.Abstract;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Soenneker.GitHub.OpenApiClient.Repos.Item.Item.Actions.Runs;
+using GetStatusQueryParameterType = Soenneker.GitHub.OpenApiClient.Repos.Item.Item.Commits.Item.CheckRuns.GetStatusQueryParameterType;
 using Repository = Soenneker.GitHub.OpenApiClient.Models.Repository;
 
 namespace Soenneker.GitHub.Repositories.Runs;
@@ -48,11 +51,13 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         if (mergeSha is null && headSha is null)
             return false; // nothing to evaluate
 
-        GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken).NoSync();
+        GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken)
+                                                                   .NoSync();
 
         if (mergeSha is not null)
         {
-            (bool failed, bool hadAnyRuns) = await HasCommitFailureWithAny(owner, repo, mergeSha, client, cancellationToken).NoSync();
+            (bool failed, bool hadAnyRuns) = await HasCommitFailureWithAny(owner, repo, mergeSha, client, cancellationToken)
+                .NoSync();
 
             if (failed)
                 return true; // red CI on merge commit → block
@@ -62,19 +67,24 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         }
 
         // 2) Fall back to the branch head when the merge commit had zero statuses.
-        return await HasCommitFailure(owner, repo, headSha!, client, cancellationToken).NoSync();
+        return await HasCommitFailure(owner, repo, headSha!, client, cancellationToken)
+            .NoSync();
     }
 
     public async ValueTask<bool> HasCommitFailure(string owner, string repo, string sha, CancellationToken cancellationToken = default)
     {
-        GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken).NoSync();
-        return await HasCommitFailure(owner, repo, sha, client, cancellationToken).NoSync();
+        GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken)
+                                                                   .NoSync();
+        return await HasCommitFailure(owner, repo, sha, client, cancellationToken)
+            .NoSync();
     }
 
     public async ValueTask<List<CheckRun>> GetAllRuns(string owner, string repo, string sha, CancellationToken cancellationToken = default)
     {
-        GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken).NoSync();
-        return (await GetLatestRuns(owner, repo, sha, client, cancellationToken).NoSync()).ToList();
+        GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken)
+                                                                   .NoSync();
+        return (await GetLatestRuns(owner, repo, sha, client, cancellationToken)
+            .NoSync()).ToList();
     }
 
     /// <summary>
@@ -83,13 +93,15 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
     private async ValueTask<bool> HasCommitFailure(string owner, string repo, string sha, GitHubOpenApiClient client, CancellationToken cancellationToken)
     {
         // a) legacy combined status roll‑up
-        (bool combinedFailed, _) = await GetCommitStatus(owner, repo, sha, client, cancellationToken).NoSync();
+        (bool combinedFailed, _) = await GetCommitStatus(owner, repo, sha, client, cancellationToken)
+            .NoSync();
 
         if (combinedFailed)
             return true; // hard failure – we’re done
 
         // b) always inspect latest check‑runs
-        IReadOnlyList<CheckRun> runs = await GetLatestRuns(owner, repo, sha, client, cancellationToken).NoSync();
+        IReadOnlyList<CheckRun> runs = await GetLatestRuns(owner, repo, sha, client, cancellationToken)
+            .NoSync();
         return runs.Any(r => r.Conclusion.HasValue && _badConclusions.Contains(r.Conclusion.Value));
     }
 
@@ -99,9 +111,12 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
     private static async ValueTask<(bool combinedFailed, bool hadStatuses)> GetCommitStatus(string owner, string repo, string sha, GitHubOpenApiClient client,
         CancellationToken ct)
     {
-        CombinedCommitStatus? status = await client.Repos[owner][repo].Commits[sha].Status.GetAsync(cancellationToken: ct).NoSync();
+        CombinedCommitStatus? status = await client.Repos[owner][repo]
+                                                   .Commits[sha]
+                                                   .Status.GetAsync(cancellationToken: ct)
+                                                   .NoSync();
 
-        bool combinedFailed = status is {State: "failure" or "error"};
+        bool combinedFailed = status is { State: "failure" or "error" };
         bool hadStatuses = status?.Statuses?.Count > 0;
 
         return (combinedFailed, hadStatuses);
@@ -121,17 +136,17 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         while (true)
         {
             CheckRunsGetResponse? resp = await client.Repos[owner][repo]
-                                                    .Commits[sha]
-                                                    .CheckRuns.GetAsync(cfg =>
-                                                    {
-                                                        cfg.QueryParameters.PerPage = pageSize;
-                                                        cfg.QueryParameters.Page = page;
-                                                        cfg.QueryParameters.Filter = GetFilterQueryParameterType.Latest;
-                                                        cfg.QueryParameters.Status = GetStatusQueryParameterType.Completed;
-                                                    }, cancellationToken)
-                                                    .NoSync();
+                                                     .Commits[sha]
+                                                     .CheckRuns.GetAsync(cfg =>
+                                                     {
+                                                         cfg.QueryParameters.PerPage = pageSize;
+                                                         cfg.QueryParameters.Page = page;
+                                                         cfg.QueryParameters.Filter = GetFilterQueryParameterType.Latest;
+                                                         cfg.QueryParameters.Status = GetStatusQueryParameterType.Completed;
+                                                     }, cancellationToken)
+                                                     .NoSync();
 
-            if (resp?.CheckRuns is {Count: > 0})
+            if (resp?.CheckRuns is { Count: > 0 })
                 allRuns.AddRange(resp.CheckRuns);
 
             // Early‑out when the page has less than the page size (no more data)
@@ -152,13 +167,15 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         CancellationToken cancellationToken)
     {
         // --- legacy statuses (single API call for both combined state and had-statuses) ---
-        (bool combinedFailed, bool hadStatuses) = await GetCommitStatus(owner, repo, sha, client, cancellationToken).NoSync();
+        (bool combinedFailed, bool hadStatuses) = await GetCommitStatus(owner, repo, sha, client, cancellationToken)
+            .NoSync();
 
         if (combinedFailed)
             return (true, true); // we already know it failed and had CI
 
         // --- check‑runs --------------------------------------------------------
-        IReadOnlyList<CheckRun> runs = await GetLatestRuns(owner, repo, sha, client, cancellationToken).NoSync();
+        IReadOnlyList<CheckRun> runs = await GetLatestRuns(owner, repo, sha, client, cancellationToken)
+            .NoSync();
 
         bool runsFailed = runs.Any(r => r.Conclusion.HasValue && _badConclusions.Contains(r.Conclusion.Value));
         bool hadCheckRun = runs.Count > 0;
@@ -168,10 +185,12 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
 
     public async ValueTask<bool> HasAnyRuns(string owner, string repo, string sha, CancellationToken cancellationToken = default)
     {
-        GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken).NoSync();
+        GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken)
+                                                                   .NoSync();
 
         // 1) legacy status contexts
-        bool hasStatuses = await HasAnyStatuses(owner, repo, sha, client, cancellationToken);
+        bool hasStatuses = await HasAnyStatuses(owner, repo, sha, client, cancellationToken)
+            .NoSync();
         if (hasStatuses)
             return true;
 
@@ -186,13 +205,103 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
                                                  }, cancellationToken)
                                                  .NoSync();
 
-        return resp is {TotalCount: > 0};
+        return resp is { TotalCount: > 0 };
+    }
+
+    public async ValueTask<List<MinimalRepository>> GetInProgressIncrementally(string owner, int pageSize = 100, int? maxRepositoryPages = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(owner);
+
+        if (pageSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), pageSize, "Page size must be greater than 0.");
+
+        GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken)
+                                                                   .NoSync();
+
+        var results = new List<MinimalRepository>();
+        var seenRepositoryIds = new HashSet<long>();
+
+        var page = 1;
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (maxRepositoryPages.HasValue && page > maxRepositoryPages.Value)
+                break;
+
+            List<MinimalRepository>? repositories = await client.Orgs[owner]
+                                                                .Repos.GetAsync(cfg =>
+                                                                {
+                                                                    cfg.QueryParameters.PerPage = pageSize;
+                                                                    cfg.QueryParameters.Page = page;
+                                                                    // cfg.QueryParameters.Type = GetReposTypeQueryParameterType.All; // enable if your client exposes it
+                                                                }, cancellationToken)
+                                                                .NoSync();
+
+            if (repositories is null || repositories.Count == 0)
+                break;
+
+            repositories.Shuffle();
+
+            _logger.LogInformation("Scanning repository page {Page} for owner {Owner} ({Count} repos)...", page, owner, repositories.Count);
+
+            foreach (MinimalRepository repo in repositories)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (repo.Id is not null && !seenRepositoryIds.Add(repo.Id.Value))
+                    continue;
+
+                bool hasQueuedOrInProgress = await HasInProgressWorkflowRuns(owner, repo.Name, cancellationToken)
+                    .NoSync();
+
+                if (!hasQueuedOrInProgress)
+                    continue;
+
+                results.Add(repo);
+
+                _logger.LogInformation("Repository with active workflow run found: {Owner}/{Repo}", owner, repo.Name);
+            }
+
+            if (repositories.Count < pageSize)
+                break;
+
+            page++;
+        }
+
+        return results;
+    }
+
+    public async ValueTask<bool> HasInProgressWorkflowRuns(string owner, string repo, CancellationToken cancellationToken)
+    {
+        GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken)
+                                                                   .NoSync();
+
+        // Check in-progress first
+        RunsGetResponse? inProgressResponse = await client.Repos[owner][repo]
+                                                          .Actions.Runs.GetAsync(cfg =>
+                                                          {
+                                                              cfg.QueryParameters.PerPage = 1;
+                                                              cfg.QueryParameters.Status = OpenApiClient.Repos.Item.Item.Actions.Runs
+                                                                                                        .GetStatusQueryParameterType.In_progress;
+                                                          }, cancellationToken)
+                                                          .NoSync();
+
+        if (inProgressResponse?.TotalCount is > 0)
+            return true;
+
+        return false;
     }
 
     public async ValueTask<bool> HasAnyStatuses(string owner, string repo, string sha, GitHubOpenApiClient client,
         CancellationToken cancellationToken = default)
     {
-        CombinedCommitStatus? status = await client.Repos[owner][repo].Commits[sha].Status.GetAsync(cancellationToken: cancellationToken).NoSync();
+        CombinedCommitStatus? status = await client.Repos[owner][repo]
+                                                   .Commits[sha]
+                                                   .Status.GetAsync(cancellationToken: cancellationToken)
+                                                   .NoSync();
 
         // "statuses" array length > 0  → at least one CI context ran
         return status?.Statuses?.Count > 0;

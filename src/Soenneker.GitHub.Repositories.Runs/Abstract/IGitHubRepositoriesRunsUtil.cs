@@ -77,4 +77,21 @@ public interface IGitHubRepositoriesRunsUtil
 
     [Pure]
     ValueTask<bool> HasAnyStatuses(string owner, string repo, string sha, GitHubOpenApiClient client, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Incrementally scans repositories for queued or in-progress workflow runs.
+    /// Repositories are fetched a page at a time, each page is shuffled before inspection,
+    /// and matching repositories are logged immediately when discovered.
+    /// </summary>
+    /// <param name="owner">The owner or organization login.</param>
+    /// <param name="pageSize">The number of repositories to fetch per page.</param>
+    /// <param name="maxRepositoryPages">Optional maximum number of repository pages to scan. Null scans until exhaustion.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>A list of repositories that currently have queued or in-progress workflow runs.</returns>
+    [Pure]
+    ValueTask<List<MinimalRepository>> GetInProgressIncrementally(string owner, int pageSize = 100, int? maxRepositoryPages = null,
+        CancellationToken cancellationToken = default);
+
+    [Pure]
+    ValueTask<bool> HasInProgressWorkflowRuns(string owner, string repo, CancellationToken cancellationToken);
 }
