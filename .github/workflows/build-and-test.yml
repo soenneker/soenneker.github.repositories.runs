@@ -38,7 +38,7 @@ jobs:
         run: dotnet build test/Soenneker.GitHub.Repositories.Runs.Tests/Soenneker.GitHub.Repositories.Runs.Tests.csproj --configuration Release --no-restore --verbosity minimal
 
       - name: Test
-        run: dotnet test test/Soenneker.GitHub.Repositories.Runs.Tests/Soenneker.GitHub.Repositories.Runs.Tests.csproj --configuration Release --no-build --no-restore --verbosity minimal
+        run: dotnet test --project test/Soenneker.GitHub.Repositories.Runs.Tests/Soenneker.GitHub.Repositories.Runs.Tests.csproj --configuration Release --no-build --no-restore --verbosity minimal
 
       - name: Pack
         run: dotnet pack src/Soenneker.GitHub.Repositories.Runs/Soenneker.GitHub.Repositories.Runs.csproj --configuration Release --no-build --no-restore --output . --verbosity minimal
