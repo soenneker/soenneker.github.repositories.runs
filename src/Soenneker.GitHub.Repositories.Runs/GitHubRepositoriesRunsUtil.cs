@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Kiota.Abstractions;
 using Soenneker.Extensions.Task;
 using Soenneker.Extensions.ValueTask;
 using Soenneker.GitHub.ClientUtil.Abstract;
@@ -13,6 +14,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Soenneker.GitHub.OpenApiClient.Repos.Item.Item.Actions.Runs;
 using GetStatusQueryParameterType = Soenneker.GitHub.OpenApiClient.Repos.Item.Item.Commits.Item.CheckRuns.GetStatusQueryParameterType;
+using WorkflowRunsGetStatusQueryParameterType = Soenneker.GitHub.OpenApiClient.Repos.Item.Item.Actions.Workflows.Item.Runs.GetStatusQueryParameterType;
+using WorkflowRunsGetResponse = Soenneker.GitHub.OpenApiClient.Repos.Item.Item.Actions.Workflows.Item.Runs.RunsGetResponse;
 using Repository = Soenneker.GitHub.OpenApiClient.Models.Repository;
 
 namespace Soenneker.GitHub.Repositories.Runs;
@@ -33,6 +36,14 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         CheckRun_conclusion.Cancelled,
         CheckRun_conclusion.Action_required
     ];
+
+    private static readonly HashSet<string> _badWorkflowRunConclusions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "failure",
+        "timed_out",
+        "cancelled",
+        "action_required"
+    };
 
     public GitHubRepositoriesRunsUtil(ILogger<GitHubRepositoriesRunsUtil> logger, IGitHubOpenApiClientUtil gitHubOpenApiClientUtil)
     {
@@ -272,6 +283,103 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         }
 
         return results;
+    }
+
+    public ValueTask<List<WorkflowRun>> GetLatestFailedPublishPackageRuns(string owner, int pageSize = 100, int? maxRepositoryPages = null,
+        CancellationToken cancellationToken = default) =>
+        GetLatestFailedWorkflowRuns(owner, "publish-package.yml", pageSize, maxRepositoryPages, cancellationToken);
+
+    public async ValueTask<List<WorkflowRun>> GetLatestFailedWorkflowRuns(string owner, string workflowFileName, int pageSize = 100,
+        int? maxRepositoryPages = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(owner);
+        ArgumentException.ThrowIfNullOrWhiteSpace(workflowFileName);
+
+        if (pageSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), pageSize, "Page size must be greater than 0.");
+
+        GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken)
+                                                                   .NoSync();
+
+        var results = new List<WorkflowRun>();
+        var seenRepositoryIds = new HashSet<long>();
+        var page = 1;
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (maxRepositoryPages.HasValue && page > maxRepositoryPages.Value)
+                break;
+
+            List<MinimalRepository>? repositories = await client.Orgs[owner]
+                                                                .Repos.GetAsync(cfg =>
+                                                                {
+                                                                    cfg.QueryParameters.PerPage = pageSize;
+                                                                    cfg.QueryParameters.Page = page;
+                                                                }, cancellationToken)
+                                                                .NoSync();
+
+            if (repositories is null || repositories.Count == 0)
+                break;
+
+            _logger.LogInformation("Scanning repository page {Page} for failed {Workflow} runs under {Owner} ({Count} repos)...", page, workflowFileName,
+                owner, repositories.Count);
+
+            foreach (MinimalRepository repo in repositories)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (repo.Name is null)
+                    continue;
+
+                if (repo.Id is not null && !seenRepositoryIds.Add(repo.Id.Value))
+                    continue;
+
+                WorkflowRun? latestRun = await GetLatestCompletedWorkflowRun(owner, repo.Name, workflowFileName, client, cancellationToken)
+                    .NoSync();
+
+                if (latestRun?.Conclusion is null || !_badWorkflowRunConclusions.Contains(latestRun.Conclusion))
+                    continue;
+
+                results.Add(latestRun);
+
+                _logger.LogInformation("Latest {Workflow} run is failing: {Owner}/{Repo} ({Conclusion}) {Url}", workflowFileName, owner, repo.Name,
+                    latestRun.Conclusion, latestRun.HtmlUrl);
+            }
+
+            if (repositories.Count < pageSize)
+                break;
+
+            page++;
+        }
+
+        return results;
+    }
+
+    private async ValueTask<WorkflowRun?> GetLatestCompletedWorkflowRun(string owner, string repo, string workflowFileName, GitHubOpenApiClient client,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            WorkflowRunsGetResponse? response = await client.Repos[owner][repo]
+                                                            .Actions
+                                                            .Workflows[workflowFileName]
+                                                            .Runs.GetAsync(cfg =>
+                                                            {
+                                                                cfg.QueryParameters.PerPage = 1;
+                                                                cfg.QueryParameters.Status = WorkflowRunsGetStatusQueryParameterType.Completed;
+                                                                cfg.QueryParameters.ExcludePullRequests = true;
+                                                            }, cancellationToken)
+                                                            .NoSync();
+
+            return response?.WorkflowRuns?.FirstOrDefault();
+        }
+        catch (ApiException e) when (e.ResponseStatusCode == 404)
+        {
+            _logger.LogDebug("Workflow {Workflow} was not found for {Owner}/{Repo}", workflowFileName, owner, repo);
+            return null;
+        }
     }
 
     public async ValueTask<bool> HasInProgressWorkflowRuns(string owner, string repo, CancellationToken cancellationToken)

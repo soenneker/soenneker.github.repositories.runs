@@ -94,4 +94,18 @@ public interface IGitHubRepositoriesRunsUtil
 
     [Pure]
     ValueTask<bool> HasInProgressWorkflowRuns(string owner, string repo, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Scans repositories for the latest completed <c>publish-package.yml</c> workflow run and returns runs whose conclusion failed.
+    /// </summary>
+    [Pure]
+    ValueTask<List<WorkflowRun>> GetLatestFailedPublishPackageRuns(string owner, int pageSize = 100, int? maxRepositoryPages = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Scans repositories for the latest completed workflow run by file name and returns runs whose conclusion failed.
+    /// </summary>
+    [Pure]
+    ValueTask<List<WorkflowRun>> GetLatestFailedWorkflowRuns(string owner, string workflowFileName, int pageSize = 100, int? maxRepositoryPages = null,
+        CancellationToken cancellationToken = default);
 }
