@@ -10,6 +10,7 @@ using Soenneker.GitHub.Repositories.Runs.Abstract;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using Soenneker.GitHub.OpenApiClient.Repos.Item.Item.Actions.Runs;
@@ -375,12 +376,15 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
 
             return response?.WorkflowRuns?.FirstOrDefault();
         }
-        catch (ApiException e) when (e.ResponseStatusCode == 404)
+        catch (Exception e) when (IsNotFound(e))
         {
             _logger.LogDebug("Workflow {Workflow} was not found for {Owner}/{Repo}", workflowFileName, owner, repo);
             return null;
         }
     }
+
+    private static bool IsNotFound(Exception exception) =>
+        exception is ApiException { ResponseStatusCode: (int) HttpStatusCode.NotFound };
 
     public async ValueTask<bool> HasInProgressWorkflowRuns(string owner, string repo, CancellationToken cancellationToken)
     {
