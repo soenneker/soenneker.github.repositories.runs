@@ -6,6 +6,7 @@ using Soenneker.GitHub.ClientUtil.Abstract;
 using Soenneker.GitHub.OpenApiClient;
 using Soenneker.GitHub.OpenApiClient.Models;
 using Soenneker.GitHub.OpenApiClient.Repos.Item.Item.Commits.Item.CheckRuns;
+using Soenneker.GitHub.Repositories.Abstract;
 using Soenneker.GitHub.Repositories.Runs.Abstract;
 using System;
 using System.Collections.Generic;
@@ -26,6 +27,7 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
 {
     private readonly ILogger<GitHubRepositoriesRunsUtil> _logger;
     private readonly IGitHubOpenApiClientUtil _gitHubOpenApiClientUtil;
+    private readonly IGitHubRepositoriesUtil _gitHubRepositoriesUtil;
 
     /// <summary>
     /// Conclusions that mark a run as failed for the purposes of merge‑gate logic.
@@ -46,10 +48,12 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         "action_required"
     };
 
-    public GitHubRepositoriesRunsUtil(ILogger<GitHubRepositoriesRunsUtil> logger, IGitHubOpenApiClientUtil gitHubOpenApiClientUtil)
+    public GitHubRepositoriesRunsUtil(ILogger<GitHubRepositoriesRunsUtil> logger, IGitHubOpenApiClientUtil gitHubOpenApiClientUtil,
+        IGitHubRepositoriesUtil gitHubRepositoriesUtil)
     {
         _logger = logger;
         _gitHubOpenApiClientUtil = gitHubOpenApiClientUtil;
+        _gitHubRepositoriesUtil = gitHubRepositoriesUtil;
     }
 
     public ValueTask<bool> HasFailedRun(Repository repo, PullRequest pr, CancellationToken cancellationToken = default) =>
@@ -228,59 +232,37 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         if (pageSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(pageSize), pageSize, "Page size must be greater than 0.");
 
-        GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken)
-                                                                   .NoSync();
+        List<MinimalRepository> repositories = await _gitHubRepositoriesUtil.GetAllForOwner(owner, cancellationToken: cancellationToken)
+            .NoSync();
 
         var results = new List<MinimalRepository>();
         var seenRepositoryIds = new HashSet<long>();
+        int? maxRepositories = maxRepositoryPages * pageSize;
 
-        var page = 1;
+        repositories.Shuffle();
 
-        while (true)
+        foreach (MinimalRepository repo in repositories)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (maxRepositoryPages.HasValue && page > maxRepositoryPages.Value)
+            if (maxRepositories.HasValue && seenRepositoryIds.Count >= maxRepositories.Value)
                 break;
 
-            List<MinimalRepository>? repositories = await client.Orgs[owner]
-                                                                .Repos.GetAsync(cfg =>
-                                                                {
-                                                                    cfg.QueryParameters.PerPage = pageSize;
-                                                                    cfg.QueryParameters.Page = page;
-                                                                    // cfg.QueryParameters.Type = GetReposTypeQueryParameterType.All; // enable if your client exposes it
-                                                                }, cancellationToken)
-                                                                .NoSync();
+            if (repo.Name is null)
+                continue;
 
-            if (repositories is null || repositories.Count == 0)
-                break;
+            if (repo.Id is not null && !seenRepositoryIds.Add(repo.Id.Value))
+                continue;
 
-            repositories.Shuffle();
+            bool hasQueuedOrInProgress = await HasInProgressWorkflowRuns(owner, repo.Name, cancellationToken)
+                .NoSync();
 
-            _logger.LogInformation("Scanning repository page {Page} for owner {Owner} ({Count} repos)...", page, owner, repositories.Count);
+            if (!hasQueuedOrInProgress)
+                continue;
 
-            foreach (MinimalRepository repo in repositories)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
+            results.Add(repo);
 
-                if (repo.Id is not null && !seenRepositoryIds.Add(repo.Id.Value))
-                    continue;
-
-                bool hasQueuedOrInProgress = await HasInProgressWorkflowRuns(owner, repo.Name, cancellationToken)
-                    .NoSync();
-
-                if (!hasQueuedOrInProgress)
-                    continue;
-
-                results.Add(repo);
-
-                _logger.LogInformation("Repository with active workflow run found: {Owner}/{Repo}", owner, repo.Name);
-            }
-
-            if (repositories.Count < pageSize)
-                break;
-
-            page++;
+            _logger.LogInformation("Repository with active workflow run found: {Owner}/{Repo}", owner, repo.Name);
         }
 
         return results;
@@ -302,57 +284,36 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken)
                                                                    .NoSync();
 
+        List<MinimalRepository> repositories = await _gitHubRepositoriesUtil.GetAllForOwner(owner, cancellationToken: cancellationToken)
+            .NoSync();
+
         var results = new List<WorkflowRun>();
         var seenRepositoryIds = new HashSet<long>();
-        var page = 1;
+        int? maxRepositories = maxRepositoryPages * pageSize;
 
-        while (true)
+        foreach (MinimalRepository repo in repositories)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (maxRepositoryPages.HasValue && page > maxRepositoryPages.Value)
+            if (maxRepositories.HasValue && seenRepositoryIds.Count >= maxRepositories.Value)
                 break;
 
-            List<MinimalRepository>? repositories = await client.Orgs[owner]
-                                                                .Repos.GetAsync(cfg =>
-                                                                {
-                                                                    cfg.QueryParameters.PerPage = pageSize;
-                                                                    cfg.QueryParameters.Page = page;
-                                                                }, cancellationToken)
-                                                                .NoSync();
+            if (repo.Name is null)
+                continue;
 
-            if (repositories is null || repositories.Count == 0)
-                break;
+            if (repo.Id is not null && !seenRepositoryIds.Add(repo.Id.Value))
+                continue;
 
-            _logger.LogInformation("Scanning repository page {Page} for failed {Workflow} runs under {Owner} ({Count} repos)...", page, workflowFileName,
-                owner, repositories.Count);
+            WorkflowRun? latestRun = await GetLatestCompletedWorkflowRun(owner, repo.Name, workflowFileName, client, cancellationToken)
+                .NoSync();
 
-            foreach (MinimalRepository repo in repositories)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
+            if (latestRun?.Conclusion is null || !_badWorkflowRunConclusions.Contains(latestRun.Conclusion))
+                continue;
 
-                if (repo.Name is null)
-                    continue;
+            results.Add(latestRun);
 
-                if (repo.Id is not null && !seenRepositoryIds.Add(repo.Id.Value))
-                    continue;
-
-                WorkflowRun? latestRun = await GetLatestCompletedWorkflowRun(owner, repo.Name, workflowFileName, client, cancellationToken)
-                    .NoSync();
-
-                if (latestRun?.Conclusion is null || !_badWorkflowRunConclusions.Contains(latestRun.Conclusion))
-                    continue;
-
-                results.Add(latestRun);
-
-                _logger.LogInformation("Latest {Workflow} run is failing: {Owner}/{Repo} ({Conclusion}) {Url}", workflowFileName, owner, repo.Name,
-                    latestRun.Conclusion, latestRun.HtmlUrl);
-            }
-
-            if (repositories.Count < pageSize)
-                break;
-
-            page++;
+            _logger.LogInformation("Latest {Workflow} run is failing: {Owner}/{Repo} ({Conclusion}) {Url}", workflowFileName, owner, repo.Name,
+                latestRun.Conclusion, latestRun.HtmlUrl);
         }
 
         return results;
