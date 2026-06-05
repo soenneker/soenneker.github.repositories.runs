@@ -75,6 +75,15 @@ public interface IGitHubRepositoriesRunsUtil
     [Pure]
     ValueTask<List<CheckRun>> GetAllRuns(string owner, string repo, string sha, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Executes the has any statuses operation.
+    /// </summary>
+    /// <param name="owner">The owner.</param>
+    /// <param name="repo">The repo.</param>
+    /// <param name="sha">The sha.</param>
+    /// <param name="client">The client.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task containing the result of the operation.</returns>
     [Pure]
     ValueTask<bool> HasAnyStatuses(string owner, string repo, string sha, GitHubOpenApiClient client, CancellationToken cancellationToken = default);
 
@@ -92,6 +101,13 @@ public interface IGitHubRepositoriesRunsUtil
     ValueTask<List<MinimalRepository>> GetInProgressIncrementally(string owner, int pageSize = 100, int? maxRepositoryPages = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Executes the has in progress workflow runs operation.
+    /// </summary>
+    /// <param name="owner">The owner.</param>
+    /// <param name="repo">The repo.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task containing the result of the operation.</returns>
     [Pure]
     ValueTask<bool> HasInProgressWorkflowRuns(string owner, string repo, CancellationToken cancellationToken);
 
