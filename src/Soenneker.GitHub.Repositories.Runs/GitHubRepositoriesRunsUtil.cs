@@ -5,7 +5,6 @@ using Soenneker.Extensions.ValueTask;
 using Soenneker.GitHub.ClientUtil.Abstract;
 using Soenneker.GitHub.OpenApiClient;
 using Soenneker.GitHub.OpenApiClient.Models;
-using Soenneker.GitHub.OpenApiClient.Repos.Item.Item.Commits.Item.CheckRuns;
 using Soenneker.GitHub.Repositories.Abstract;
 using Soenneker.GitHub.Repositories.Runs.Abstract;
 using System;
@@ -14,10 +13,6 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-using Soenneker.GitHub.OpenApiClient.Repos.Item.Item.Actions.Runs;
-using GetStatusQueryParameterType = Soenneker.GitHub.OpenApiClient.Repos.Item.Item.Commits.Item.CheckRuns.GetStatusQueryParameterType;
-using WorkflowRunsGetStatusQueryParameterType = Soenneker.GitHub.OpenApiClient.Repos.Item.Item.Actions.Workflows.Item.Runs.GetStatusQueryParameterType;
-using WorkflowRunsGetResponse = Soenneker.GitHub.OpenApiClient.Repos.Item.Item.Actions.Workflows.Item.Runs.RunsGetResponse;
 using Repository = Soenneker.GitHub.OpenApiClient.Models.Repository;
 
 namespace Soenneker.GitHub.Repositories.Runs;
@@ -32,12 +27,12 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
     /// <summary>
     /// Conclusions that mark a run as failed for the purposes of merge‑gate logic.
     /// </summary>
-    private static readonly HashSet<CheckRun_conclusion> _badConclusions =
+    private static readonly HashSet<CheckRunConclusion> _badConclusions =
     [
-        CheckRun_conclusion.Failure,
-        CheckRun_conclusion.Timed_out,
-        CheckRun_conclusion.Cancelled,
-        CheckRun_conclusion.Action_required
+        CheckRunConclusion.Failure,
+        CheckRunConclusion.TimedOut,
+        CheckRunConclusion.Cancelled,
+        CheckRunConclusion.ActionRequired
     ];
 
     private static readonly HashSet<string> _badWorkflowRunConclusions = new(StringComparer.OrdinalIgnoreCase)
@@ -151,14 +146,14 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
 
         while (true)
         {
-            CheckRunsGetResponse? resp = await client.Repos[owner][repo]
+            ChecksListForRef200Response? resp = await client.Repos[owner][repo]
                                                      .Commits[sha]
                                                      .CheckRuns.GetAsync(cfg =>
                                                      {
                                                          cfg.QueryParameters.PerPage = pageSize;
                                                          cfg.QueryParameters.Page = page;
-                                                         cfg.QueryParameters.Filter = GetFilterQueryParameterType.Latest;
-                                                         cfg.QueryParameters.Status = GetStatusQueryParameterType.Completed;
+                                                         cfg.QueryParameters.Filter = ChecksListForRefFilterParameter.Latest;
+                                                         cfg.QueryParameters.Status = StatusEnum.Completed;
                                                      }, cancellationToken)
                                                      .NoSync();
 
@@ -211,13 +206,13 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
             return true;
 
         // 2) check‑runs → request just one
-        CheckRunsGetResponse? resp = await client.Repos[owner][repo]
+        ChecksListForRef200Response? resp = await client.Repos[owner][repo]
                                                  .Commits[sha]
                                                  .CheckRuns.GetAsync(cfg =>
                                                  {
                                                      cfg.QueryParameters.PerPage = 1; // ask for ONE
-                                                     cfg.QueryParameters.Filter = GetFilterQueryParameterType.Latest;
-                                                     cfg.QueryParameters.Status = GetStatusQueryParameterType.Completed;
+                                                     cfg.QueryParameters.Filter = ChecksListForRefFilterParameter.Latest;
+                                                     cfg.QueryParameters.Status = StatusEnum.Completed;
                                                  }, cancellationToken)
                                                  .NoSync();
 
@@ -324,13 +319,13 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
     {
         try
         {
-            WorkflowRunsGetResponse? response = await client.Repos[owner][repo]
+            ActionsListWorkflowRuns200Response? response = await client.Repos[owner][repo]
                                                             .Actions
                                                             .Workflows[workflowFileName]
                                                             .Runs.GetAsync(cfg =>
                                                             {
                                                                 cfg.QueryParameters.PerPage = 1;
-                                                                cfg.QueryParameters.Status = WorkflowRunsGetStatusQueryParameterType.Completed;
+                                                                cfg.QueryParameters.Status = WorkflowRunStatus.Completed;
                                                                 cfg.QueryParameters.ExcludePullRequests = true;
                                                             }, cancellationToken)
                                                             .NoSync();
@@ -353,12 +348,11 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
                                                                    .NoSync();
 
         // Check in-progress first
-        RunsGetResponse? inProgressResponse = await client.Repos[owner][repo]
+        ActionsListWorkflowRunsForRepo200Response? inProgressResponse = await client.Repos[owner][repo]
                                                           .Actions.Runs.GetAsync(cfg =>
                                                           {
                                                               cfg.QueryParameters.PerPage = 1;
-                                                              cfg.QueryParameters.Status = OpenApiClient.Repos.Item.Item.Actions.Runs
-                                                                                                        .GetStatusQueryParameterType.In_progress;
+                                                              cfg.QueryParameters.Status = WorkflowRunStatus.InProgress;
                                                           }, cancellationToken)
                                                           .NoSync();
 
