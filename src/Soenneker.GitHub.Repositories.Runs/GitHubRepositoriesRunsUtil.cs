@@ -11,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Repository = Soenneker.GitHub.OpenApiClient.Models.Repository;
@@ -267,6 +268,10 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         CancellationToken cancellationToken = default) =>
         GetLatestFailedWorkflowRuns(owner, "publish-package.yml", pageSize, maxRepositoryPages, cancellationToken);
 
+    public IAsyncEnumerable<WorkflowRun> GetLatestFailedPublishPackageRunsIncrementally(string owner, int pageSize = 100,
+        int? maxRepositoryPages = null, CancellationToken cancellationToken = default) =>
+        GetLatestFailedWorkflowRunsIncrementally(owner, "publish-package.yml", pageSize, maxRepositoryPages, cancellationToken);
+
     public async ValueTask<List<WorkflowRun>> GetLatestFailedWorkflowRuns(string owner, string workflowFileName, int pageSize = 100,
         int? maxRepositoryPages = null, CancellationToken cancellationToken = default)
     {
@@ -312,6 +317,56 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         }
 
         return results;
+    }
+
+    public async IAsyncEnumerable<WorkflowRun> GetLatestFailedWorkflowRunsIncrementally(string owner, string workflowFileName, int pageSize = 100,
+        int? maxRepositoryPages = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(owner);
+        ArgumentException.ThrowIfNullOrWhiteSpace(workflowFileName);
+
+        if (pageSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), pageSize, "Page size must be greater than 0.");
+
+        if (maxRepositoryPages < 0)
+            throw new ArgumentOutOfRangeException(nameof(maxRepositoryPages), maxRepositoryPages, "Maximum repository pages cannot be negative.");
+
+        int? maxRepositories = maxRepositoryPages * pageSize;
+
+        if (maxRepositories == 0)
+            yield break;
+
+        GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken)
+                                                                   .NoSync();
+
+        var seenRepositoryIds = new HashSet<long>();
+        var repositoriesScanned = 0;
+
+        await foreach (MinimalRepository repo in _gitHubRepositoriesUtil
+                           .GetAllForOwnerIncrementally(owner, pageSize: pageSize, cancellationToken: cancellationToken)
+                           .WithCancellation(cancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            repositoriesScanned++;
+
+            if (repo.Name is not null && (repo.Id is null || seenRepositoryIds.Add(repo.Id.Value)))
+            {
+                WorkflowRun? latestRun = await GetLatestCompletedWorkflowRun(owner, repo.Name, workflowFileName, client, cancellationToken)
+                    .NoSync();
+
+                if (latestRun?.Conclusion is not null && _badWorkflowRunConclusions.Contains(latestRun.Conclusion))
+                {
+                    _logger.LogInformation("Latest {Workflow} run is failing: {Owner}/{Repo} ({Conclusion}) {Url}", workflowFileName, owner,
+                        repo.Name, latestRun.Conclusion, latestRun.HtmlUrl);
+
+                    yield return latestRun;
+                }
+            }
+
+            // Stop before asking the underlying async enumerator to fetch the next page.
+            if (maxRepositories.HasValue && repositoriesScanned >= maxRepositories.Value)
+                yield break;
+        }
     }
 
     private async ValueTask<WorkflowRun?> GetLatestCompletedWorkflowRun(string owner, string repo, string workflowFileName, GitHubOpenApiClient client,

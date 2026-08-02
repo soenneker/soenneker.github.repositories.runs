@@ -119,9 +119,23 @@ public interface IGitHubRepositoriesRunsUtil
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Incrementally scans repositories for the latest completed <c>publish-package.yml</c> workflow run and yields failed runs as they are found.
+    /// </summary>
+    [Pure]
+    IAsyncEnumerable<WorkflowRun> GetLatestFailedPublishPackageRunsIncrementally(string owner, int pageSize = 100, int? maxRepositoryPages = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Scans repositories for the latest completed workflow run by file name and returns runs whose conclusion failed.
     /// </summary>
     [Pure]
     ValueTask<List<WorkflowRun>> GetLatestFailedWorkflowRuns(string owner, string workflowFileName, int pageSize = 100, int? maxRepositoryPages = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Incrementally scans repositories for the latest completed workflow run by file name and yields failed runs as they are found.
+    /// </summary>
+    [Pure]
+    IAsyncEnumerable<WorkflowRun> GetLatestFailedWorkflowRunsIncrementally(string owner, string workflowFileName, int pageSize = 100,
+        int? maxRepositoryPages = null, CancellationToken cancellationToken = default);
 }
