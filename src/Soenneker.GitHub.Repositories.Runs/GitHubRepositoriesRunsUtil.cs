@@ -374,22 +374,51 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
     {
         try
         {
-            ActionsListWorkflowRuns200Response? response = await client.Repos[owner][repo]
-                                                            .Actions
-                                                            .Workflows[workflowFileName]
-                                                            .Runs.GetAsync(cfg =>
-                                                            {
-                                                                cfg.QueryParameters.PerPage = 1;
-                                                                cfg.QueryParameters.Status = WorkflowRunStatus.Completed;
-                                                                cfg.QueryParameters.ExcludePullRequests = true;
-                                                            }, cancellationToken)
-                                                            .NoSync();
+            const int pageSize = 100;
+            string workflowPath = $".github/workflows/{workflowFileName}";
+            Workflow? workflow = null;
+            var page = 1;
 
-            return response?.WorkflowRuns?.FirstOrDefault();
+            while (true)
+            {
+                ActionsListRepoWorkflows200Response? workflowsResponse = await client.Repos[owner][repo]
+                                                                                 .Actions
+                                                                                 .Workflows.GetAsync(cfg =>
+                                                                                 {
+                                                                                     cfg.QueryParameters.PerPage = pageSize;
+                                                                                     cfg.QueryParameters.Page = page;
+                                                                                 }, cancellationToken)
+                                                                                 .NoSync();
+
+                workflow = workflowsResponse?.Workflows?.FirstOrDefault(candidate => candidate.DeletedAt is null &&
+                    string.Equals(candidate.Path, workflowPath, StringComparison.Ordinal));
+
+                if (workflow is not null || workflowsResponse?.Workflows is null || workflowsResponse.Workflows.Count < pageSize)
+                    break;
+
+                page++;
+            }
+
+            if (workflow?.Id is null)
+                return null;
+
+            ActionsListWorkflowRuns200Response? runsResponse = await client.Repos[owner][repo]
+                                                                .Actions
+                                                                .Workflows[workflow.Id.Value.ToString()]
+                                                                .Runs.GetAsync(cfg =>
+                                                                {
+                                                                    cfg.QueryParameters.PerPage = pageSize;
+                                                                    cfg.QueryParameters.Status = WorkflowRunStatus.Completed;
+                                                                    cfg.QueryParameters.ExcludePullRequests = true;
+                                                                }, cancellationToken)
+                                                                .NoSync();
+
+            return runsResponse?.WorkflowRuns?.OrderByDescending(run => run.RunNumber)
+                               .ThenByDescending(run => run.RunAttempt)
+                               .FirstOrDefault();
         }
         catch (Exception e) when (IsNotFound(e))
         {
-            _logger.LogDebug("Workflow {Workflow} was not found for {Owner}/{Repo}", workflowFileName, owner, repo);
             return null;
         }
     }
