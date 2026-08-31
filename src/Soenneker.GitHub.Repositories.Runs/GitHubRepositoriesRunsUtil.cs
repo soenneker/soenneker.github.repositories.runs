@@ -18,7 +18,6 @@ using Repository = Soenneker.GitHub.OpenApiClient.Models.Repository;
 
 namespace Soenneker.GitHub.Repositories.Runs;
 
-/// <inheritdoc cref="IGitHubRepositoriesRunsUtil" />
 public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
 {
     private readonly ILogger<GitHubRepositoriesRunsUtil> _logger;
@@ -52,8 +51,16 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         _gitHubRepositoriesUtil = gitHubRepositoriesUtil;
     }
 
-    public ValueTask<bool> HasFailedRun(Repository repo, PullRequest pr, CancellationToken cancellationToken = default) =>
-        HasFailedRun(repo.Owner.Login, repo.Name, pr, cancellationToken);
+    public ValueTask<bool> HasFailedRun(Repository repo, PullRequest pr, CancellationToken cancellationToken = default)
+    {
+        string? owner = repo.Owner?.Login;
+        string? name = repo.Name;
+
+        if (owner == null || name == null)
+            throw new InvalidOperationException("The repository must include its owner login and name.");
+
+        return HasFailedRun(owner, name, pr, cancellationToken);
+    }
 
     public async ValueTask<bool> HasFailedRun(string owner, string repo, PullRequest pr, CancellationToken cancellationToken = default)
     {
@@ -213,7 +220,6 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
                                                  {
                                                      cfg.QueryParameters.PerPage = 1; // ask for ONE
                                                      cfg.QueryParameters.Filter = ChecksListForRefFilterParameter.Latest;
-                                                     cfg.QueryParameters.Status = StatusEnum.Completed;
                                                  }, cancellationToken)
                                                  .NoSync();
 
@@ -431,7 +437,6 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken)
                                                                    .NoSync();
 
-        // Check in-progress first
         ActionsListWorkflowRunsForRepo200Response? inProgressResponse = await client.Repos[owner][repo]
                                                           .Actions.Runs.GetAsync(cfg =>
                                                           {
@@ -443,7 +448,14 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         if (inProgressResponse?.TotalCount is > 0)
             return true;
 
-        return false;
+        ActionsListWorkflowRunsForRepo200Response? queuedResponse = await client.Repos[owner][repo]
+            .Actions.Runs.GetAsync(cfg =>
+            {
+                cfg.QueryParameters.PerPage = 1;
+                cfg.QueryParameters.Status = WorkflowRunStatus.Queued;
+            }, cancellationToken).NoSync();
+
+        return queuedResponse?.TotalCount is > 0;
     }
 
     public async ValueTask<bool> HasAnyStatuses(string owner, string repo, string sha, GitHubOpenApiClient client,

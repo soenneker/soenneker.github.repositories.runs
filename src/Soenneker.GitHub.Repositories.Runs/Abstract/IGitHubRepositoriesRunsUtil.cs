@@ -9,12 +9,7 @@ using Repository = Soenneker.GitHub.OpenApiClient.Models.Repository;
 namespace Soenneker.GitHub.Repositories.Runs.Abstract;
 
 /// <summary>
-///     Contract for utilities that inspect GitHub pull-requests and commits to
-///     determine whether any CI/CD workflows have failed.  
-///     <para/>
-///     All members are <see langword="async" /> and return <see cref="ValueTask" />
-///     to minimise allocations when the underlying HTTP call is short-circuited
-///     (e.g., when the PR has no runs).
+/// Inspects GitHub check runs, commit statuses, and Actions workflow runs for commits, pull requests, and repositories.
 /// </summary>
 public interface IGitHubRepositoriesRunsUtil
 {
@@ -61,15 +56,14 @@ public interface IGitHubRepositoriesRunsUtil
     ValueTask<bool> HasAnyRuns(string owner, string repo, string sha, CancellationToken cancellationToken = default);
 
     /// <summary>
-    ///     Retrieves <b>all</b> check-runs for the specified commit, following
-    ///     pagination as required.
+    ///     Retrieves the latest completed check-run for each check suite on the specified commit, following pagination as required.
     /// </summary>
     /// <param name="owner">Repository owner (user or organisation login).</param>
     /// <param name="repo">Repository name (without the owner).</param>
     /// <param name="sha">Full 40-character commit SHA.</param>
     /// <param name="cancellationToken">Optional cancellation token.</param>
     /// <returns>
-    ///     A list containing every <see cref="CheckRun" /> found on the commit.
+    ///     A list containing the latest completed <see cref="CheckRun" /> for each suite on the commit.
     ///     The list is empty when no check-runs exist.
     /// </returns>
     [Pure]

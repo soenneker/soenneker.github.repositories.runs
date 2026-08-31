@@ -7,7 +7,7 @@
     </PropertyGroup>
 
     <PropertyGroup>
-        <Description>A utility library for GitHub repository run/build related operations</Description>
+        <Description>Inspects GitHub check runs, commit statuses, and Actions workflow runs</Description>
         <Version Condition="'$(BUILD_VERSION)' == ''">4.0.0</Version>
         <Version Condition="'$(BUILD_VERSION)' != ''">$(BUILD_VERSION)</Version>
         <AssemblyName>Soenneker.GitHub.Repositories.Runs</AssemblyName>

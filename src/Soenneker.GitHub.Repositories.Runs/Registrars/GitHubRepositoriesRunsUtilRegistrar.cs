@@ -7,7 +7,7 @@ using Soenneker.GitHub.Repositories.Runs.Abstract;
 namespace Soenneker.GitHub.Repositories.Runs.Registrars;
 
 /// <summary>
-/// A utility library for GitHub repository run/build related operations
+/// Registers services for inspecting GitHub check runs, commit statuses, and Actions workflow runs.
 /// </summary>
 public static class GitHubRepositoriesRunsUtilRegistrar
 {
