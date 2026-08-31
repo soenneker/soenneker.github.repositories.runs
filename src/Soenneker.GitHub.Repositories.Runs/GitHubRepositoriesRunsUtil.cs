@@ -310,16 +310,20 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
             if (repo.Id is not null && !seenRepositoryIds.Add(repo.Id.Value))
                 continue;
 
+            _logger.LogInformation("Scanning latest {Workflow} run for {Owner}/{Repo}", workflowFileName, owner, repo.Name);
+
             WorkflowRun? latestRun = await GetLatestCompletedWorkflowRun(owner, repo.Name, workflowFileName, client, cancellationToken)
                 .NoSync();
 
-            if (latestRun?.Conclusion is null || !_badWorkflowRunConclusions.Contains(latestRun.Conclusion))
+            bool isFailing = latestRun?.Conclusion is not null && _badWorkflowRunConclusions.Contains(latestRun.Conclusion);
+
+            _logger.LogInformation("Scanned latest {Workflow} run for {Owner}/{Repo}: conclusion={Conclusion}, failing={IsFailing}, url={Url}",
+                workflowFileName, owner, repo.Name, latestRun?.Conclusion ?? "none", isFailing, latestRun?.HtmlUrl);
+
+            if (!isFailing)
                 continue;
 
-            results.Add(latestRun);
-
-            _logger.LogInformation("Latest {Workflow} run is failing: {Owner}/{Repo} ({Conclusion}) {Url}", workflowFileName, owner, repo.Name,
-                latestRun.Conclusion, latestRun.HtmlUrl);
+            results.Add(latestRun!);
         }
 
         return results;
@@ -357,15 +361,19 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
 
             if (repo.Name is not null && (repo.Id is null || seenRepositoryIds.Add(repo.Id.Value)))
             {
+                _logger.LogInformation("Scanning latest {Workflow} run for {Owner}/{Repo}", workflowFileName, owner, repo.Name);
+
                 WorkflowRun? latestRun = await GetLatestCompletedWorkflowRun(owner, repo.Name, workflowFileName, client, cancellationToken)
                     .NoSync();
 
-                if (latestRun?.Conclusion is not null && _badWorkflowRunConclusions.Contains(latestRun.Conclusion))
-                {
-                    _logger.LogInformation("Latest {Workflow} run is failing: {Owner}/{Repo} ({Conclusion}) {Url}", workflowFileName, owner,
-                        repo.Name, latestRun.Conclusion, latestRun.HtmlUrl);
+                bool isFailing = latestRun?.Conclusion is not null && _badWorkflowRunConclusions.Contains(latestRun.Conclusion);
 
-                    yield return latestRun;
+                _logger.LogInformation("Scanned latest {Workflow} run for {Owner}/{Repo}: conclusion={Conclusion}, failing={IsFailing}, url={Url}",
+                    workflowFileName, owner, repo.Name, latestRun?.Conclusion ?? "none", isFailing, latestRun?.HtmlUrl);
+
+                if (isFailing)
+                {
+                    yield return latestRun!;
                 }
             }
 
