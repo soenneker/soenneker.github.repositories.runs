@@ -120,6 +120,18 @@ public interface IGitHubRepositoriesRunsUtil
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets the latest completed run for a workflow file in a repository when its conclusion indicates failure.
+    /// </summary>
+    /// <param name="owner">The repository owner or organization login.</param>
+    /// <param name="repo">The repository name.</param>
+    /// <param name="workflowFileName">The workflow file name, such as <c>publish-package.yml</c>.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The latest failed run, or <see langword="null"/> when the workflow does not exist or its latest completed run did not fail.</returns>
+    [Pure]
+    ValueTask<WorkflowRun?> GetLatestFailedWorkflowRun(string owner, string repo, string workflowFileName,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Scans repositories for the latest completed workflow run by file name and returns runs whose conclusion failed.
     /// </summary>
     [Pure]

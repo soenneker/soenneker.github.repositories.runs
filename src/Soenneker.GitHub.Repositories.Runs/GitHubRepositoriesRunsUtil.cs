@@ -278,6 +278,22 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         int? maxRepositoryPages = null, CancellationToken cancellationToken = default) =>
         GetLatestFailedWorkflowRunsIncrementally(owner, "publish-package.yml", pageSize, maxRepositoryPages, cancellationToken);
 
+    public async ValueTask<WorkflowRun?> GetLatestFailedWorkflowRun(string owner, string repo, string workflowFileName,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(owner);
+        ArgumentException.ThrowIfNullOrWhiteSpace(repo);
+        ArgumentException.ThrowIfNullOrWhiteSpace(workflowFileName);
+
+        GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken)
+                                                                   .NoSync();
+
+        WorkflowRun? latestRun = await GetLatestCompletedWorkflowRun(owner, repo, workflowFileName, client, cancellationToken)
+            .NoSync();
+
+        return latestRun?.Conclusion is not null && _badWorkflowRunConclusions.Contains(latestRun.Conclusion) ? latestRun : null;
+    }
+
     public async ValueTask<List<WorkflowRun>> GetLatestFailedWorkflowRuns(string owner, string workflowFileName, int pageSize = 100,
         int? maxRepositoryPages = null, CancellationToken cancellationToken = default)
     {
@@ -388,48 +404,18 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
     {
         try
         {
-            const int pageSize = 100;
-            string workflowPath = $".github/workflows/{workflowFileName}";
-            Workflow? workflow = null;
-            var page = 1;
-
-            while (true)
-            {
-                ActionsListRepoWorkflows200Response? workflowsResponse = await client.Repos[owner][repo]
-                                                                                 .Actions
-                                                                                 .Workflows.GetAsync(cfg =>
-                                                                                 {
-                                                                                     cfg.QueryParameters.PerPage = pageSize;
-                                                                                     cfg.QueryParameters.Page = page;
-                                                                                 }, cancellationToken)
-                                                                                 .NoSync();
-
-                workflow = workflowsResponse?.Workflows?.FirstOrDefault(candidate => candidate.DeletedAt is null &&
-                    string.Equals(candidate.Path, workflowPath, StringComparison.Ordinal));
-
-                if (workflow is not null || workflowsResponse?.Workflows is null || workflowsResponse.Workflows.Count < pageSize)
-                    break;
-
-                page++;
-            }
-
-            if (workflow?.Id is null)
-                return null;
-
             ActionsListWorkflowRuns200Response? runsResponse = await client.Repos[owner][repo]
                                                                 .Actions
-                                                                .Workflows[workflow.Id.Value.ToString()]
+                                                                .Workflows[workflowFileName]
                                                                 .Runs.GetAsync(cfg =>
                                                                 {
-                                                                    cfg.QueryParameters.PerPage = pageSize;
+                                                                    cfg.QueryParameters.PerPage = 1;
                                                                     cfg.QueryParameters.Status = WorkflowRunStatus.Completed;
                                                                     cfg.QueryParameters.ExcludePullRequests = true;
                                                                 }, cancellationToken)
                                                                 .NoSync();
 
-            return runsResponse?.WorkflowRuns?.OrderByDescending(run => run.RunNumber)
-                               .ThenByDescending(run => run.RunAttempt)
-                               .FirstOrDefault();
+            return runsResponse?.WorkflowRuns?.FirstOrDefault();
         }
         catch (Exception e) when (IsNotFound(e))
         {
