@@ -18,6 +18,7 @@ using Repository = Soenneker.GitHub.OpenApiClient.Models.Repository;
 
 namespace Soenneker.GitHub.Repositories.Runs;
 
+/// <inheritdoc cref="IGitHubRepositoriesRunsUtil" />
 public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
 {
     private readonly ILogger<GitHubRepositoriesRunsUtil> _logger;
