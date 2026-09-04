@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Repository = Soenneker.GitHub.OpenApiClient.Models.Repository;
@@ -103,8 +104,8 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
     {
         GitHubOpenApiClient client = await _gitHubOpenApiClientUtil.Get(cancellationToken)
                                                                    .NoSync();
-        return (await GetLatestRuns(owner, repo, sha, client, cancellationToken)
-            .NoSync()).ToList();
+        return await GetLatestRuns(owner, repo, sha, client, cancellationToken)
+            .NoSync();
     }
 
     /// <summary>
@@ -120,7 +121,7 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
             return true; // hard failure – we’re done
 
         // b) always inspect latest check‑runs
-        IReadOnlyList<CheckRun> runs = await GetLatestRuns(owner, repo, sha, client, cancellationToken)
+        List<CheckRun> runs = await GetLatestRuns(owner, repo, sha, client, cancellationToken)
             .NoSync();
         return runs.Any(r => r.Conclusion.HasValue && _badConclusions.Contains(r.Conclusion.Value));
     }
@@ -194,7 +195,7 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
             return (true, true); // we already know it failed and had CI
 
         // --- check‑runs --------------------------------------------------------
-        IReadOnlyList<CheckRun> runs = await GetLatestRuns(owner, repo, sha, client, cancellationToken)
+        List<CheckRun> runs = await GetLatestRuns(owner, repo, sha, client, cancellationToken)
             .NoSync();
 
         bool runsFailed = runs.Any(r => r.Conclusion.HasValue && _badConclusions.Contains(r.Conclusion.Value));
@@ -242,7 +243,7 @@ public sealed class GitHubRepositoriesRunsUtil : IGitHubRepositoriesRunsUtil
         var seenRepositoryIds = new HashSet<long>();
         int? maxRepositories = maxRepositoryPages * pageSize;
 
-        repositories.Shuffle();
+        Random.Shared.Shuffle(CollectionsMarshal.AsSpan(repositories));
 
         foreach (MinimalRepository repo in repositories)
         {
