@@ -45,6 +45,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Soenneker.GitHub.Repositories" Version="4.0.1324" />
+        <PackageReference Include="Soenneker.GitHub.Repositories" Version="4.0.1325" />
     </ItemGroup>
 </Project>
